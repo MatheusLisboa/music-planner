@@ -220,7 +220,12 @@ const Schedules: React.FC = () => {
                           rel="noreferrer"
                           className="flex items-center justify-between p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-all border border-transparent hover:border-gray-200"
                         >
-                          <span className="text-sm font-medium text-gray-700">{song.name}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-medium text-gray-700">{song.name}</span>
+                            {song.key && (
+                              <span className="px-1.5 py-0.5 bg-gray-200 text-gray-700 text-[9px] font-black rounded uppercase">{song.key}</span>
+                            )}
+                          </div>
                           <ChevronRight size={14} className="text-gray-400" />
                         </a>
                       );
@@ -312,7 +317,10 @@ const Schedules: React.FC = () => {
                               isSelected ? "bg-blue-50 border-blue-500 text-blue-900" : "bg-white border-gray-100"
                             )}
                           >
-                            <span className="font-bold text-sm">{song.name}</span>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-sm">{song.name}</span>
+                              {song.key && <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{song.key}</span>}
+                            </div>
                             {isSelected && <CheckCircle2 size={18} />}
                           </div>
                         );

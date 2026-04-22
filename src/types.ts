@@ -52,6 +52,7 @@ export interface Song {
   id: string;
   name: string;
   youtubeLink?: string;
+  key?: string;
   tenant_id: string;
 }
 

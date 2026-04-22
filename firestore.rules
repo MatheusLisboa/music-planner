@@ -77,7 +77,8 @@ service cloud.firestore {
 
     function isValidSong(data) {
       return data.name is string && data.name.size() > 0 &&
-             data.tenant_id is string && isValidId(data.tenant_id);
+             data.tenant_id is string && isValidId(data.tenant_id) &&
+             (data.get('key', '') is string);
     }
 
     // --- COLLECTIONS ---

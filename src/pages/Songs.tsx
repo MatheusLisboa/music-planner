@@ -17,6 +17,12 @@ const Songs: React.FC = () => {
   // Form state
   const [name, setName] = useState('');
   const [youtubeLink, setYoutubeLink] = useState('');
+  const [key, setKey] = useState('');
+
+  const MUSICAL_KEYS = [
+    'C', 'C#', 'Db', 'D', 'D#', 'Eb', 'E', 'F', 'F#', 'Gb', 'G', 'G#', 'Ab', 'A', 'A#', 'Bb', 'B',
+    'Cm', 'C#m', 'Dbm', 'Dm', 'D#m', 'Ebm', 'Em', 'Fm', 'F#m', 'Gbm', 'Gm', 'G#m', 'Abm', 'Am', 'A#m', 'Bbm', 'Bm'
+  ];
 
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
@@ -44,6 +50,7 @@ const Songs: React.FC = () => {
     const data = {
       name,
       youtubeLink,
+      key,
       tenant_id: profile.tenant_id
     };
 
@@ -65,12 +72,14 @@ const Songs: React.FC = () => {
     setEditingSong(null);
     setName('');
     setYoutubeLink('');
+    setKey('');
   };
 
   const openEdit = (song: Song) => {
     setEditingSong(song);
     setName(song.name);
     setYoutubeLink(song.youtubeLink || '');
+    setKey(song.key || '');
     setShowModal(true);
   };
 
@@ -139,7 +148,12 @@ const Songs: React.FC = () => {
               </div>
               
               <h3 className="text-xl font-bold text-gray-900 truncate">{song.name}</h3>
-              <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-mono">ID: {song.id.slice(0,8)}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-mono">ID: {song.id.slice(0,8)}</p>
+                {song.key && (
+                  <span className="px-2 py-0.5 bg-gray-900 text-white text-[10px] font-black rounded-md">{song.key}</span>
+                )}
+              </div>
             </motion.div>
           ))}
           
@@ -185,6 +199,20 @@ const Songs: React.FC = () => {
                     className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900/10 transition-all font-medium"
                     placeholder="https://youtube.com/..."
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest ml-1">Tom (Opcional)</label>
+                  <select 
+                    value={key}
+                    onChange={(e) => setKey(e.target.value)}
+                    className="w-full px-5 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-gray-900/10 transition-all font-medium appearance-none"
+                  >
+                    <option value="">Selecione o Tom</option>
+                    {MUSICAL_KEYS.map(k => (
+                      <option key={k} value={k}>{k}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <button 
