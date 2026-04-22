@@ -1,0 +1,6 @@
+{
+  "name": "Music Planner",
+  "description": "Plataforma SaaS multi-tenant para gerenciamento de escalas de louvor, integrantes e disponibilidade técnica para igrejas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

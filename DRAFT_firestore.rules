@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES ---
+    function isSignedIn() { return request.auth != null; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // Fetching current user's profile to check tenant and role
+    // Cache the result for the request
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isSuperAdmin() {
+      return isSignedIn() && currentUser().role == 'super_admin';
+    }
+    
+    function isTenantAdmin(tenantId) {
+      return isSignedIn() && (isSuperAdmin() || (currentUser().tenant_id == tenantId && currentUser().role == 'admin'));
+    }
+    
+    function isTenantMember(tenantId) {
+      return isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == tenantId);
+    }
+
+    // --- VALIDATION HELPERS ---
+    
+    function isValidChurch(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.tenant_id is string && isValidId(data.tenant_id) &&
+             data.status in ['active', 'inactive'];
+    }
+
+    function isValidUser(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.email is string && data.email.size() > 0 &&
+             data.role in ['admin', 'member', 'super_admin'] &&
+             data.tenant_id is string && isValidId(data.tenant_id);
+    }
+
+    function isValidService(data) {
+      return data.date is string && data.time is string && data.type is string &&
+             data.tenant_id is string && isValidId(data.tenant_id);
+    }
+
+    function isValidAvailability(data) {
+      return data.user_id is string && isValidId(data.user_id) &&
+             data.service_id is string && isValidId(data.service_id) &&
+             data.tenant_id is string && isValidId(data.tenant_id) &&
+             data.status in ['available', 'unavailable', 'maybe'];
+    }
+
+    function isValidSchedule(data) {
+      return data.service_id is string && isValidId(data.service_id) &&
+             data.tenant_id is string && isValidId(data.tenant_id) &&
+             data.status in ['pending', 'confirmed'];
+    }
+
+    function isValidSong(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.tenant_id is string && isValidId(data.tenant_id);
+    }
+
+    // --- COLLECTIONS ---
+
+    match /churches/{churchId} {
+      allow read: if isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == churchId);
+      allow create: if isSuperAdmin() && isValidChurch(incoming());
+      allow update: if isSuperAdmin() && isValidChurch(incoming());
+      allow delete: if false; // Churches are only deactivated
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == existing().tenant_id);
+      allow list: if isSignedIn() && (isSuperAdmin() || (currentUser().tenant_id == resource.data.tenant_id));
+      
+      allow create: if (isSuperAdmin() || (isTenantAdmin(incoming().tenant_id))) && isValidUser(incoming());
+      
+      allow update: if isSignedIn() && (
+        isSuperAdmin() || 
+        (isTenantAdmin(existing().tenant_id) && incoming().tenant_id == existing().tenant_id) ||
+        (request.auth.uid == userId && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'instrument', 'mustChangePassword']) &&
+         incoming().role == existing().role &&
+         incoming().tenant_id == existing().tenant_id
+        )
+      ) && isValidUser(incoming());
+    }
+
+    match /services/{serviceId} {
+      allow read: if isTenantMember(resource.data.tenant_id);
+      allow create: if isTenantAdmin(incoming().tenant_id) && isValidService(incoming());
+      allow update: if isTenantAdmin(existing().tenant_id) && isValidService(incoming());
+      allow delete: if isTenantAdmin(existing().tenant_id);
+    }
+
+    match /availability/{availabilityId} {
+      allow read: if isTenantMember(resource.data.tenant_id);
+      allow create: if isSignedIn() && 
+                      request.auth.uid == incoming().user_id && 
+                      isTenantMember(incoming().tenant_id) && 
+                      isValidAvailability(incoming());
+      allow update: if isSignedIn() && 
+                      request.auth.uid == existing().user_id && 
+                      incoming().user_id == existing().user_id &&
+                      isTenantMember(incoming().tenant_id) && 
+                      isValidAvailability(incoming());
+      allow delete: if isSignedIn() && request.auth.uid == existing().user_id;
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isTenantMember(resource.data.tenant_id);
+      allow create: if isTenantAdmin(incoming().tenant_id) && isValidSchedule(incoming());
+      allow update: if isTenantAdmin(existing().tenant_id) && isValidSchedule(incoming());
+      allow delete: if isTenantAdmin(existing().tenant_id);
+    }
+
+    match /songs/{songId} {
+      allow read: if isTenantMember(resource.data.tenant_id);
+      allow create: if isTenantAdmin(incoming().tenant_id) && isValidSong(incoming());
+      allow update: if isTenantAdmin(existing().tenant_id) && isValidSong(incoming());
+      allow delete: if isTenantAdmin(existing().tenant_id);
+    }
+  }
+}

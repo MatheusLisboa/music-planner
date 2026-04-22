@@ -1,0 +1,104 @@
+{
+  "entities": {
+    "Church": {
+      "title": "Church",
+      "description": "Represents a church tenant.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["name", "tenant_id", "status"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents a user (admin or member).",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "member", "super_admin"] },
+        "type": { "type": "string", "enum": ["vocal", "instrument"] },
+        "instrument": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "mustChangePassword": { "type": "boolean" }
+      },
+      "required": ["name", "email", "role", "tenant_id"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Represents a church service/culto.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "time": { "type": "string" },
+        "type": { "type": "string" },
+        "tenant_id": { "type": "string" }
+      },
+      "required": ["date", "time", "type", "tenant_id"]
+    },
+    "Availability": {
+      "title": "Availability",
+      "description": "User availability for a service.",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "service_id": { "type": "string" },
+        "tenant_id": { "type": "string" },
+        "status": { "type": "string", "enum": ["available", "unavailable", "maybe"] }
+      },
+      "required": ["user_id", "service_id", "tenant_id", "status"]
+    },
+    "Schedule": {
+      "title": "Schedule",
+      "description": "Represents a praise team schedule for a service.",
+      "type": "object",
+      "properties": {
+        "service_id": { "type": "string" },
+        "user_ids": { "type": "array", "items": { "type": "string" } },
+        "song_ids": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "confirmed"] },
+        "tenant_id": { "type": "string" }
+      },
+      "required": ["service_id", "status", "tenant_id"]
+    },
+    "Song": {
+      "title": "Song",
+      "description": "Represents a song in the repertoire.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "youtubeLink": { "type": "string" },
+        "tenant_id": { "type": "string" }
+      },
+      "required": ["name", "tenant_id"]
+    }
+  },
+  "firestore": {
+    "/churches/{churchId}": {
+      "schema": "Church",
+      "description": "Collection of churches."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of app users."
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Collection of church services."
+    },
+    "/availability/{availabilityId}": {
+      "schema": "Availability",
+      "description": "Collection of user availabilities."
+    },
+    "/schedules/{scheduleId}": {
+      "schema": "Schedule",
+      "description": "Collection of worship schedules."
+    },
+    "/songs/{songId}": {
+      "schema": "Song",
+      "description": "Collection of repertoire songs."
+    }
+  }
+}
