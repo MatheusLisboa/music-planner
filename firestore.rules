@@ -18,15 +18,24 @@ service cloud.firestore {
     }
     
     function isSuperAdmin() {
-      return isSignedIn() && currentUser().role == 'super_admin';
+      return isSignedIn() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
     }
     
     function isTenantAdmin(tenantId) {
-      return isSignedIn() && (isSuperAdmin() || (currentUser().tenant_id == tenantId && currentUser().role == 'admin'));
+      return isSignedIn() && (isSuperAdmin() || (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        currentUser().tenant_id == tenantId && 
+        currentUser().role == 'admin'
+      ));
     }
     
     function isTenantMember(tenantId) {
-      return isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == tenantId);
+      return isSignedIn() && (isSuperAdmin() || (
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        currentUser().tenant_id == tenantId
+      ));
     }
 
     // --- VALIDATION HELPERS ---
@@ -38,7 +47,7 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+      return data.name is string && data.name.size() > 0 &&
              data.email is string && data.email.size() > 0 &&
              data.role in ['admin', 'member', 'super_admin'] &&
              data.tenant_id is string && isValidId(data.tenant_id);
@@ -131,6 +140,11 @@ service cloud.firestore {
       allow create: if isTenantAdmin(incoming().tenant_id) && isValidSong(incoming());
       allow update: if isTenantAdmin(existing().tenant_id) && isValidSong(incoming());
       allow delete: if isTenantAdmin(existing().tenant_id);
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isTenantMember(resource.data.tenant_id);
+      allow write: if isTenantAdmin(incoming().tenant_id);
     }
   }
 }

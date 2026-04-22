@@ -51,6 +51,14 @@ export interface Song {
   tenant_id: string;
 }
 
+export interface Attendance {
+  id: string;
+  user_id: string;
+  service_id: string;
+  tenant_id: string;
+  timestamp: string;
+}
+
 export interface FirestoreErrorInfo {
   error: string;
   operationType: 'create' | 'update' | 'delete' | 'list' | 'get' | 'write';

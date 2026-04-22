@@ -21,8 +21,18 @@ const SuperAdminSetup: React.FC = () => {
     
     try {
       // 1. Create Auth User
-      const userCredential = await createUserWithEmailAndPassword(auth, superAdminEmail, superAdminPass);
-      const uid = userCredential.user.uid;
+      let uid = '';
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, superAdminEmail, superAdminPass);
+        uid = userCredential.user.uid;
+      } catch (authErr: any) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          setError('O usuário já existe no sistema de autenticação. Se você não consegue logar, use "Esqueci minha senha" ou verifique no Firebase. Se o perfil no Firestore estiver faltando e você quiser recriar, você precisa estar logado com esta conta.');
+          setLoading(false);
+          return;
+        }
+        throw authErr;
+      }
 
       // 2. Create User Profile in Firestore
       await setDoc(doc(db, 'users', uid), {
