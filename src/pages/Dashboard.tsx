@@ -2,8 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { collection, query, where, getDocs, limit, orderBy, updateDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Service, Schedule, User as UserProfile, Attendance, Availability as AvailabilityType } from '../types';
-import { Calendar, Music, Clock, ChevronRight, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, Users, BarChart3, UserCheck, Search, Check, Filter, Loader2 } from 'lucide-react';
+import { Service, Schedule, User as UserProfile, Attendance, Availability as AvailabilityType, Church } from '../types';
+import { 
+  Calendar, Music, Clock, ChevronRight, CheckCircle2, XCircle, AlertTriangle, 
+  ShieldCheck, Users, BarChart3, UserCheck, Search, Check, Filter, Loader2, 
+  Building2, Hash, Power 
+} from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -11,12 +15,12 @@ import { updatePassword } from 'firebase/auth';
 
 const Dashboard: React.FC = () => {
   const { profile } = useAuth();
+  const [loading, setLoading] = useState(true);
+  
+  // Member/Admin states
   const [upcomingServices, setUpcomingServices] = useState<Service[]>([]);
   const [myNextScale, setMyNextScale] = useState<Schedule | null>(null);
   const [nextScaleService, setNextScaleService] = useState<Service | null>(null);
-  const [loading, setLoading] = useState(true);
-  
-  // Admin specific states
   const [tenantUsers, setTenantUsers] = useState<UserProfile[]>([]);
   const [tenantServices, setTenantServices] = useState<Service[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
@@ -26,6 +30,12 @@ const Dashboard: React.FC = () => {
   const [stats, setStats] = useState({ members: 0, songs: 0, services: 0 });
   const [searchTerm, setSearchTerm] = useState('');
 
+  // SuperAdmin states
+  const [globalStats, setGlobalStats] = useState({ users: 0, activeChurches: 0, inactiveChurches: 0 });
+  const [recentUsers, setRecentUsers] = useState<UserProfile[]>([]);
+  const [churchList, setChurchList] = useState<Church[]>([]);
+  const [userCountsPerChurch, setUserCountsPerChurch] = useState<Record<string, number>>({});
+
   // Password change state
   const [showPassModal, setShowPassModal] = useState(profile?.mustChangePassword || false);
   const [newPassword, setNewPassword] = useState('');
@@ -33,18 +43,65 @@ const Dashboard: React.FC = () => {
   const [passError, setPassError] = useState('');
   const [passLoading, setPassLoading] = useState(false);
 
-  const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
+  const isSuperAdmin = profile?.role === 'super_admin';
+  const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
     if (!profile) return;
 
     const fetchData = async () => {
       try {
-        const tenantId = profile.tenant_id;
         const today = new Date().toISOString().split('T')[0];
 
-        if (!isAdmin) {
+        if (isSuperAdmin) {
+          // Super Admin Global Data
+          const usersSnap = await getDocs(collection(db, 'users'));
+          const churchesSnap = await getDocs(collection(db, 'churches'));
+          
+          const churches = churchesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Church));
+          const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile));
+          
+          const counts: Record<string, number> = {};
+          users.forEach(u => {
+            counts[u.tenant_id] = (counts[u.tenant_id] || 0) + 1;
+          });
+          setUserCountsPerChurch(counts);
+
+          setGlobalStats({
+            users: users.length,
+            activeChurches: churches.filter(c => c.status === 'active').length,
+            inactiveChurches: churches.filter(c => c.status === 'inactive').length
+          });
+          setRecentUsers(users.slice(0, 10));
+          setChurchList(churches);
+        } else if (isAdmin) {
+          // Admin Data
+          const tenantId = profile.tenant_id;
+          const usersSnap = await getDocs(query(collection(db, 'users'), where('tenant_id', '==', tenantId)));
+          const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile));
+          setTenantUsers(users);
+
+          const songsSnap = await getDocs(query(collection(db, 'songs'), where('tenant_id', '==', tenantId)));
+          
+          const servicesQuery = query(
+            collection(db, 'services'),
+            where('tenant_id', '==', tenantId),
+            where('date', '>=', today),
+            orderBy('date', 'asc')
+          );
+          const servicesSnap = await getDocs(servicesQuery);
+          const services = servicesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Service));
+          setTenantServices(services);
+          if (services.length > 0) setSelectedServiceId(services[0].id);
+
+          setStats({
+            members: users.length,
+            songs: songsSnap.size,
+            services: services.length
+          });
+        } else {
           // Member Data
+          const tenantId = profile.tenant_id;
           const servicesQuery = query(
             collection(db, 'services'),
             where('tenant_id', '==', tenantId),
@@ -70,30 +127,6 @@ const Dashboard: React.FC = () => {
                setNextScaleService({ id: servSnap.docs[0].id, ...servSnap.docs[0].data() } as Service);
             }
           }
-        } else {
-          // Admin Data
-          const usersSnap = await getDocs(query(collection(db, 'users'), where('tenant_id', '==', tenantId)));
-          const users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile));
-          setTenantUsers(users);
-
-          const songsSnap = await getDocs(query(collection(db, 'songs'), where('tenant_id', '==', tenantId)));
-          
-          const servicesQuery = query(
-            collection(db, 'services'),
-            where('tenant_id', '==', tenantId),
-            where('date', '>=', today),
-            orderBy('date', 'asc')
-          );
-          const servicesSnap = await getDocs(servicesQuery);
-          const services = servicesSnap.docs.map(d => ({ id: d.id, ...d.data() } as Service));
-          setTenantServices(services);
-          if (services.length > 0) setSelectedServiceId(services[0].id);
-
-          setStats({
-            members: users.length,
-            songs: songsSnap.size,
-            services: services.length
-          });
         }
       } catch (error) {
         console.error("Dashboard data fetch error:", error);
@@ -103,7 +136,7 @@ const Dashboard: React.FC = () => {
     };
 
     fetchData();
-  }, [profile, isAdmin]);
+  }, [profile, isAdmin, isSuperAdmin]);
 
   useEffect(() => {
     if (isAdmin && selectedServiceId) {
@@ -200,7 +233,117 @@ const Dashboard: React.FC = () => {
 
   if (loading) return <div className="flex items-center justify-center min-h-[400px]"><Loader2 className="animate-spin text-gray-400" size={40} /></div>;
 
-  const filteredUsers = tenantUsers.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  if (isSuperAdmin) {
+    return (
+      <div className="space-y-10 pb-20">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div>
+            <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight">Dashboard Global</h1>
+            <p className="text-gray-500 font-medium">Controle Total do Ecossistema</p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+             <div className="bg-white border border-gray-100 p-6 rounded-[2rem] shadow-sm">
+                <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Usuários</p>
+                <p className="text-3xl font-black text-gray-900">{globalStats.users}</p>
+             </div>
+             <div className="bg-white border border-gray-100 p-6 rounded-[2rem] shadow-sm">
+                <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Igrejas Ativas</p>
+                <p className="text-3xl font-black text-green-600">{globalStats.activeChurches}</p>
+             </div>
+             <div className="hidden md:block bg-white border border-gray-100 p-6 rounded-[2rem] shadow-sm">
+                <p className="text-[10px] font-black text-gray-400 uppercase mb-2">Instituições</p>
+                <p className="text-3xl font-black text-gray-400">{globalStats.activeChurches + globalStats.inactiveChurches}</p>
+             </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <section className="bg-white border border-gray-100 rounded-[2.5rem] shadow-sm overflow-hidden">
+               <div className="p-8 border-b border-gray-50 flex items-center justify-between bg-gray-50/30">
+                  <h2 className="text-xl font-bold text-gray-900">Usuários Recentes</h2>
+                  <Users size={20} className="text-gray-300" />
+               </div>
+               <div className="divide-y divide-gray-50">
+                  {recentUsers.map(user => (
+                    <div key={user.id} className="p-6 flex items-center justify-between hover:bg-gray-50 transition-colors">
+                       <div className="flex items-center gap-4">
+                          <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center font-bold text-gray-500">
+                             {user.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="font-bold text-gray-900">{user.name}</p>
+                            <p className="text-xs text-gray-400">{user.email} • {user.role}</p>
+                          </div>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-[10px] font-black uppercase text-gray-400">Cidade / Tenant</p>
+                          <p className="text-xs font-medium text-gray-600">{user.tenant_id}</p>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </section>
+          </div>
+
+          <div className="space-y-8">
+            <section className="bg-gray-900 p-8 rounded-[2.5rem] text-white shadow-xl">
+               <h2 className="text-xs font-black uppercase tracking-widest text-gray-500 mb-6 flex items-center gap-2">
+                 <Building2 size={16} /> Volume de Usuários
+               </h2>
+               <div className="space-y-6">
+                  {churchList.slice(0, 8).map(church => (
+                    <div key={church.id} className="flex items-center justify-between group">
+                       <div className="flex-1">
+                          <p className="font-bold text-sm uppercase truncate">{church.name}</p>
+                          <div className="w-full bg-white/5 h-1.5 rounded-full mt-2 overflow-hidden">
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${Math.min((userCountsPerChurch[church.tenant_id] || 0) * 5, 100)}%` }}
+                               className="h-full bg-blue-500"
+                             />
+                          </div>
+                       </div>
+                       <div className="ml-4 text-right">
+                          <p className="text-lg font-black">{userCountsPerChurch[church.tenant_id] || 0}</p>
+                          <p className="text-[8px] font-black uppercase text-gray-500">Membros</p>
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </section>
+
+            <section className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm">
+               <h2 className="text-xs font-black uppercase tracking-widest text-gray-400 mb-6 flex items-center gap-2">
+                 <Power size={16} /> Status Operacional
+               </h2>
+               <div className="space-y-4">
+                  {churchList.slice(0, 5).map(church => (
+                    <div key={church.id} className="flex items-center justify-between">
+                       <span className="text-sm font-medium text-gray-700">{church.name}</span>
+                       <div className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${
+                         church.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+                       }`}>
+                         {church.status}
+                       </div>
+                    </div>
+                  ))}
+               </div>
+            </section>
+
+            <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm text-center space-y-4">
+               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto">
+                  <ShieldCheck size={32} />
+               </div>
+               <h3 className="font-bold text-gray-900">Privilégio Super Admin</h3>
+               <p className="text-xs text-gray-500 leading-relaxed">Você tem acesso total aos dados de todas as instituições e usuários para suporte e manutenção.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isAdmin) {
     return (
@@ -269,7 +412,7 @@ const Dashboard: React.FC = () => {
                 </div>
 
                 <div className="grid md:grid-cols-2 gap-4">
-                  {filteredUsers.map(user => {
+                  {tenantUsers.filter(u => u.name.toLowerCase().includes(searchTerm.toLowerCase())).map(user => {
                     const isPresent = !!attendances[user.id];
                     const isScaled = schedules[selectedServiceId]?.user_ids.includes(user.id);
                     const availability = availabilities[user.id]?.status;
@@ -333,8 +476,8 @@ const Dashboard: React.FC = () => {
             <section className="bg-gray-900 p-8 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden">
                <div className="absolute top-0 right-0 p-8 opacity-5">
                 <BarChart3 size={150} />
-              </div>
-              <div className="relative z-10">
+               </div>
+               <div className="relative z-10">
                 <div className="flex items-center gap-2 mb-8 font-black text-[10px] uppercase tracking-widest text-gray-500">
                   <BarChart3 size={16} />
                   Resumo do Evento
@@ -366,29 +509,7 @@ const Dashboard: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </div>
-            </section>
-
-            <section className="bg-white border border-gray-100 p-8 rounded-[2.5rem] shadow-sm">
-              <h3 className="font-bold text-gray-900 mb-6 flex items-center justify-between uppercase tracking-widest text-xs">
-                Disponibilidade
-                <Filter size={14} className="text-gray-300" />
-              </h3>
-              
-              <div className="space-y-5">
-                {tenantServices.slice(0, 5).map(service => (
-                  <div key={service.id} className="flex items-center justify-between group">
-                    <div>
-                      <p className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors uppercase">{service.type}</p>
-                      <p className="text-[10px] font-mono text-gray-400">{format(parseISO(service.date), 'dd/MM/yyyy')}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       <span className="text-xs font-black text-gray-300">Pendente</span>
-                       <div className="w-2 h-2 rounded-full bg-gray-100" />
-                    </div>
-                  </div>
-                ))}
-              </div>
+               </div>
             </section>
           </div>
         </div>

@@ -19,18 +19,22 @@ const Navigation: React.FC = () => {
   ];
 
   if (profile?.role === 'super_admin') {
-    navItems.push({ name: 'Igrejas', path: '/churches', icon: Church });
-  }
-
-  navItems.push(
-    { name: 'Cultos', path: '/services', icon: Calendar },
-    { name: 'Disponibilidade', path: '/availability', icon: CheckCircle },
-    { name: 'Escalas', path: '/schedules', icon: Music },
-    { name: 'Músicas', path: '/songs', icon: Music }
-  );
-
-  if (profile?.role === 'admin' || profile?.role === 'super_admin') {
-    navItems.push({ name: 'Integrantes', path: '/users', icon: Users });
+    navItems.push(
+      { name: 'Igrejas', path: '/churches', icon: Church },
+      { name: 'Usuários Globais', path: '/users', icon: Users }
+    );
+  } else {
+    // Member/Admin Church specific items
+    navItems.push(
+      { name: 'Cultos', path: '/services', icon: Calendar },
+      { name: 'Disponibilidade', path: '/availability', icon: CheckCircle },
+      { name: 'Escalas', path: '/schedules', icon: Music },
+      { name: 'Músicas', path: '/songs', icon: Music }
+    );
+    
+    if (profile?.role === 'admin') {
+      navItems.push({ name: 'Integrantes', path: '/users', icon: Users });
+    }
   }
 
   const handleLogout = async () => {

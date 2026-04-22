@@ -43,7 +43,11 @@ service cloud.firestore {
     function isValidChurch(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.tenant_id is string && isValidId(data.tenant_id) &&
-             data.status in ['active', 'inactive'];
+             data.status in ['active', 'inactive'] &&
+             (data.get('address', '') is string) &&
+             (data.get('city', '') is string) &&
+             (data.get('state', '') is string) &&
+             (data.get('zip_code', '') is string);
     }
 
     function isValidUser(data) {
@@ -82,7 +86,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == churchId);
       // Only SuperAdmin can create churches now
       allow create: if isSuperAdmin() && isValidId(churchId) && isValidChurch(incoming());
-      allow update: if isSuperAdmin();
+      allow update: if isSuperAdmin() && isValidChurch(incoming());
       allow delete: if false; 
     }
 

@@ -17,6 +17,10 @@ export interface Church {
   name: string;
   tenant_id: string;
   status: 'active' | 'inactive';
+  address?: string;
+  city?: string;
+  state?: string;
+  zip_code?: string;
 }
 
 export interface Service {

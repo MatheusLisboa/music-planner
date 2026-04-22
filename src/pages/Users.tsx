@@ -5,14 +5,15 @@ import { initializeApp, getApp, getApps } from 'firebase/app';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { db, auth as mainAuth } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { User, UserRole, UserType } from '../types';
-import { Users as UsersIcon, Plus, Trash2, Edit3, X, Mail, Shield, User as UserIcon, Loader2 } from 'lucide-react';
+import { User, UserRole, UserType, Church } from '../types';
+import { Users as UsersIcon, Plus, Trash2, Edit3, X, Mail, Shield, User as UserIcon, Loader2, AlertCircle, Building2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx } from 'clsx';
 
 const UsersPage: React.FC = () => {
   const { profile } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [churches, setChurches] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -26,14 +27,40 @@ const UsersPage: React.FC = () => {
   const [instrument, setInstrument] = useState('');
   const [error, setError] = useState('');
 
+  const isSuperAdmin = profile?.role === 'super_admin';
+
   useEffect(() => {
-    if (profile) fetchUsers();
+    if (profile) {
+      fetchUsers();
+      if (isSuperAdmin) fetchChurches();
+    }
   }, [profile]);
+
+  const fetchChurches = async () => {
+    try {
+      const snap = await getDocs(collection(db, 'churches'));
+      const map: Record<string, string> = {};
+      snap.docs.forEach(d => {
+        const data = d.data();
+        map[data.tenant_id] = data.name;
+      });
+      setChurches(map);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const q = query(collection(db, 'users'), where('tenant_id', '==', profile!.tenant_id));
+      const usersCol = collection(db, 'users');
+      let q;
+      if (isSuperAdmin) {
+        // Only show ADMINS for SuperAdmin
+        q = query(usersCol, where('role', '==', 'admin'));
+      } else {
+        q = query(usersCol, where('tenant_id', '==', profile!.tenant_id));
+      }
       const snap = await getDocs(q);
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
     } catch (err) {
@@ -127,16 +154,18 @@ const UsersPage: React.FC = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Integrantes</h1>
-          <p className="text-gray-500">Gerencie a equipe de louvor da sua igreja.</p>
+          <h1 className="text-3xl font-bold text-gray-900">{isSuperAdmin ? 'Administradores das Igrejas' : 'Integrantes'}</h1>
+          <p className="text-gray-500">{isSuperAdmin ? 'Gestão de acessos administrativos de todas as instituições.' : 'Gerencie a equipe de louvor da sua igreja.'}</p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-lg"
-        >
-          <Plus size={20} />
-          Convidar/Criar
-        </button>
+        {!isSuperAdmin && (
+          <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="flex items-center gap-2 bg-gray-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-lg"
+          >
+            <Plus size={20} />
+            Convidar/Criar
+          </button>
+        )}
       </div>
 
       <div className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-sm">
@@ -146,7 +175,7 @@ const UsersPage: React.FC = () => {
               <tr className="bg-gray-50/50">
                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Nome</th>
                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Função</th>
-                <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">Tipo</th>
+                <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest">{isSuperAdmin ? 'Igreja' : 'Tipo'}</th>
                 <th className="px-6 py-5 text-xs font-bold text-gray-400 uppercase tracking-widest text-right">Ações</th>
               </tr>
             </thead>
@@ -173,7 +202,14 @@ const UsersPage: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600">
-                    {u.type === 'instrument' ? <span className="font-bold underline decoration-blue-500/30">{u.instrument}</span> : <span className="italic">Vocal</span>}
+                    {isSuperAdmin ? (
+                      <div className="flex items-center gap-2 font-bold text-gray-900 uppercase tracking-tight">
+                         <Building2 size={14} className="text-gray-400" />
+                         {churches[u.tenant_id] || u.tenant_id}
+                      </div>
+                    ) : (
+                      u.type === 'instrument' ? <span className="font-bold underline decoration-blue-500/30">{u.instrument}</span> : <span className="italic">Vocal</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2">
