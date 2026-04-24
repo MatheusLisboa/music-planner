@@ -11,6 +11,7 @@ export interface User {
   instrument?: string;
   tenant_id: string;
   mustChangePassword?: boolean;
+  createdAt?: string;
 }
 
 export interface Church {

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { auth, db } from '../lib/firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,7 +24,23 @@ const Login: React.FC = () => {
     setError('');
     
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err: any) {
+        // Special case: if it's the requested SuperAdmin email and the user isn't found, try creating it
+        if (email === 'matheus.fillipe.farias.lisboa@gmail.com' && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')) {
+           try {
+             // Try to create the user with the specific password
+             await createUserWithEmailAndPassword(auth, email, password);
+             // If successful, onAuthStateChanged in AuthContext will handle the Firestore profile creation
+           } catch (createErr) {
+             // If creation fails (e.g. email already exists but password was wrong), re-throw original error
+             throw err;
+           }
+        } else {
+          throw err;
+        }
+      }
       navigate('/');
     } catch (err: any) {
       console.error(err);
