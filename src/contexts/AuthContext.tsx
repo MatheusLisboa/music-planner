@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import { User as AppUser } from '../types';
 
 interface AuthContextType {
   user: FirebaseUser | null;
   profile: AppUser | null;
+  churches: Record<string, string>;
   loading: boolean;
   logout: () => Promise<void>;
 }
@@ -16,22 +17,38 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<AppUser | null>(null);
+  const [churches, setChurches] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Forçar logout uma vez para atender ao pedido do usuário de "recarregar para tela de login sem sessão"
+    auth.signOut();
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
         try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            setProfile({ id: userDoc.id, ...userDoc.data() } as AppUser);
+          // Objetivo: Todo usuário autenticado deve ser buscado em users/{uid}
+          const userRef = doc(db, 'users', firebaseUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (userSnap.exists()) {
+            const profileData = { id: userSnap.id, ...(userSnap.data() as object) } as AppUser;
+            setProfile(profileData);
+
+            // Buscar nome da igreja do usuário
+            if (profileData.tenant_id) {
+              const churchSnap = await getDoc(doc(db, 'churches', profileData.tenant_id));
+              if (churchSnap.exists()) {
+                setChurches({ [profileData.tenant_id]: churchSnap.data().name });
+              }
+            }
           } else {
-            console.warn("User profile not found in Firestore, signing out.");
+            console.warn("User profile not found in Firestore at users/" + firebaseUser.uid);
             setProfile(null);
-            // If authenticated but no profile exists, sign out to allow re-registration
-            await auth.signOut();
+            // Optional: Auto sign out if no profile exists
+            // await auth.signOut();
           }
         } catch (error) {
           console.error("Error fetching user profile:", error);
@@ -39,6 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         setProfile(null);
+        setChurches({});
       }
       
       setLoading(false);
@@ -52,7 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, logout }}>
+    <AuthContext.Provider value={{ user, profile, churches, loading, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, setDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, setDoc, updateDoc, doc, deleteDoc, limit } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -62,7 +62,7 @@ const UsersPage: React.FC = () => {
         q = query(usersCol, where('tenant_id', '==', profile!.tenant_id));
       }
       const snap = await getDocs(q);
-      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() } as User)));
+      setUsers(snap.docs.map(d => ({ id: d.id, ...(d.data() as object) } as User)));
     } catch (err) {
       console.error(err);
     } finally {
@@ -85,18 +85,45 @@ const UsersPage: React.FC = () => {
           type,
           instrument,
           tenant_id: profile.tenant_id,
+          uid: editingUser.uid || editingUser.id, // Ensure UID is preserved
           mustChangePassword: editingUser.mustChangePassword
         };
         await updateDoc(doc(db, 'users', editingUser.id), userData);
       } else {
-        // Create Auth User using secondary app trick
-        const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
-        const secondaryAuth = getAuth(secondaryApp);
+        let uid = '';
         
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, 'senhapadrao');
-        const uid = userCredential.user.uid;
+        // 1. Check if user already exists in our database (to get their UID)
+        // With updated rules, admins can now query users globally by email
+        const q = query(collection(db, 'users'), where('email', '==', email), limit(1));
+        const existingSnap = await getDocs(q);
+        
+        if (!existingSnap.empty) {
+          // User exists in at least one other church
+          uid = existingSnap.docs[0].data().uid || existingSnap.docs[0].id;
+        } else {
+          // 2. Try to create in Auth using secondary app
+          const secondaryApp = getApps().find(app => app.name === 'Secondary') || initializeApp(firebaseConfig, 'Secondary');
+          const secondaryAuth = getAuth(secondaryApp);
+          
+          try {
+            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, 'senhapadrao');
+            uid = userCredential.user.uid;
+            await secondaryAuth.signOut();
+          } catch (authErr: any) {
+            if (authErr.code === 'auth/email-already-in-use') {
+              setError("Este usuário já possui conta no sistema (em outra igreja ou anterior), mas não conseguimos vincular automaticamente. Verifique se o e-mail está correto ou contate o suporte.");
+              setProcessing(false);
+              return;
+            }
+            throw authErr;
+          }
+        }
 
+        // 3. Create the profile for THIS church
+        // Objetivo: Document ID deve ser exatamente o UID
+        
         const userData = {
+          uid,
           name,
           email,
           role,
@@ -108,7 +135,6 @@ const UsersPage: React.FC = () => {
         };
 
         await setDoc(doc(db, 'users', uid), userData);
-        await secondaryAuth.signOut();
       }
       setShowModal(false);
       resetForm();
@@ -126,8 +152,9 @@ const UsersPage: React.FC = () => {
     try {
       await deleteDoc(doc(db, 'users', id));
       fetchUsers();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert("Erro ao excluir usuário: " + (err.message || "Permissão insuficiente."));
     }
   };
 

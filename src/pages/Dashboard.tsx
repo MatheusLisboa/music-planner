@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { updatePassword } from 'firebase/auth';
 
 const Dashboard: React.FC = () => {
-  const { profile } = useAuth();
+  const { profile, churches } = useAuth();
   const [loading, setLoading] = useState(true);
   
   // Member/Admin states
@@ -351,7 +351,7 @@ const Dashboard: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight">Painel Administrativo</h1>
-            <p className="text-gray-500 font-medium">Gestão Ministerial Completa</p>
+            <p className="text-gray-500 font-medium">{churches[profile?.tenant_id || ''] || 'Gestão Ministerial Completa'}</p>
           </div>
           
           <div className="flex flex-wrap gap-4">
@@ -522,7 +522,9 @@ const Dashboard: React.FC = () => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-black text-gray-900 uppercase tracking-tight">Olá, {profile?.name.split(' ')[0]}!</h1>
-          <p className="text-gray-500 font-medium mt-1 uppercase tracking-widest text-xs">Sincronize seu louvor</p>
+          <p className="text-gray-500 font-medium mt-1 uppercase tracking-widest text-xs">
+            {churches[profile?.tenant_id || ''] || 'Sincronize seu louvor'}
+          </p>
         </div>
         <div className="flex items-center gap-2 px-6 py-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
           <Clock size={16} className="text-gray-400" />

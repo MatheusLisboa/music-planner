@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, getDocs, doc, setDoc, updateDoc, where } from 'firebase/firestore';
+import { collection, query, getDocs, doc, setDoc, updateDoc, where, deleteDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, getAuth } from 'firebase/auth';
 import { initializeApp, getApps } from 'firebase/app';
 import firebaseConfig from '../../firebase-applet-config.json';
@@ -8,7 +8,7 @@ import { Church, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   Church as ChurchIcon, Plus, UserPlus, Shield, AlertCircle, Loader2, X, 
-  CheckCircle2, MapPin, Search, Edit2, Power, Building2, Users 
+  CheckCircle2, MapPin, Search, Edit2, Power, Building2, Users, Trash2 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -156,6 +156,22 @@ const Churches: React.FC = () => {
       fetchChurches();
     } catch (err) {
       console.error("Error toggling status:", err);
+    }
+  };
+
+  const handleDeleteChurch = async (id: string) => {
+    if (!window.confirm('TEM CERTEZA? Isso excluirá a igreja PERMANENTEMENTE e todos os seus vínculos. Recomendamos apenas desativar.')) return;
+    try {
+      setProcessing(true);
+      await deleteDoc(doc(db, 'churches', id));
+      fetchChurches();
+      setSuccessMessage('Instituição excluída com sucesso.');
+      setTimeout(() => setSuccessMessage(''), 4000);
+    } catch (err) {
+      console.error("Error deleting church:", err);
+      setError("Erro ao excluir igreja. Verifique permissões.");
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -403,6 +419,13 @@ const Churches: React.FC = () => {
                     title={church.status === 'active' ? 'Desativar Igreja' : 'Ativar Igreja'}
                   >
                     <Power size={18} />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteChurch(church.id)}
+                    className="p-3.5 bg-white border border-red-100 text-red-600 rounded-2xl hover:bg-red-50 transition-all shadow-sm"
+                    title="Excluir Permanentemente"
+                  >
+                    <Trash2 size={18} />
                   </button>
                 </div>
               </motion.div>

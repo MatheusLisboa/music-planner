@@ -10,7 +10,7 @@ function cn(...inputs: ClassValue[]) {
 }
 
 const Navigation: React.FC = () => {
-  const { profile, logout } = useAuth();
+  const { profile, churches, logout } = useAuth();
   const location = useLocation();
   const [isOpen, setIsOpen] = React.useState(false);
 
@@ -64,6 +64,19 @@ const Navigation: React.FC = () => {
           <div className="p-6">
             <h1 className="text-2xl font-black tracking-tight text-gray-900">MUSIC PLANNER</h1>
             <p className="text-xs font-mono text-gray-400 mt-1 uppercase tracking-widest">Louvor & Escalas</p>
+          </div>
+
+          <div className="px-4 mb-6">
+            <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+              <div className="w-full flex items-center justify-between group cursor-default">
+                <div className="text-left overflow-hidden">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Igreja Atual</p>
+                  <p className="font-bold text-gray-900 truncate">
+                    {churches[profile?.tenant_id || ''] || (profile?.role === 'super_admin' ? 'Global Admin' : 'Nenhuma')}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <nav className="flex-1 px-4 space-y-1 overflow-y-auto">

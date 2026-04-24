@@ -36,6 +36,7 @@ const SuperAdminSetup: React.FC = () => {
 
       // 2. Create User Profile in Firestore
       await setDoc(doc(db, 'users', uid), {
+        uid,
         name: 'Matheus Lisboa',
         email: superAdminEmail,
         role: 'super_admin',

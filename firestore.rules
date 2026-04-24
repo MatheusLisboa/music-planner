@@ -1,6 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     // 0. Global Safety Net
     match /{document=**} {
       allow read, write: if false;
@@ -11,50 +12,46 @@ service cloud.firestore {
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
-    
-    // Fetching current user's profile to check tenant and role
-    function currentUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
+
     function isSuperAdmin() {
-      return isSignedIn() && 
-             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin';
-    }
-    
-    function isTenantAdmin(tenantId) {
-      return isSignedIn() && (isSuperAdmin() || (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        currentUser().tenant_id == tenantId && 
-        currentUser().role == 'admin'
-      ));
-    }
-    
-    function isTenantMember(tenantId) {
-      return isSignedIn() && (isSuperAdmin() || (
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        currentUser().tenant_id == tenantId
-      ));
+      return isSignedIn() && (
+        request.auth.token.email == 'matheus.fillipe.farias.lisboa@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'super_admin')
+      );
     }
 
-    // --- VALIDATION HELPERS ---
-    
+    function isTenantAdmin(tenantId) {
+      return isSignedIn() && (
+        isSuperAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('tenant_id', '') == tenantId &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', '') == 'admin')
+      );
+    }
+
+    function isTenantMember(tenantId) {
+      return isSignedIn() && (
+        isSuperAdmin() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('tenant_id', '') == tenantId)
+      );
+    }
+
+    // --- VALIDATIONS ---
+
     function isValidChurch(data) {
       return data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
              data.tenant_id is string && isValidId(data.tenant_id) &&
-             data.status in ['active', 'inactive'] &&
-             (data.get('address', '') is string) &&
-             (data.get('city', '') is string) &&
-             (data.get('state', '') is string) &&
-             (data.get('zip_code', '') is string);
+             data.status in ['active', 'inactive'];
     }
 
     function isValidUser(data) {
       return data.name is string && data.name.size() > 0 &&
              data.email is string && data.email.size() > 0 &&
              data.role in ['admin', 'member', 'super_admin'] &&
-             data.tenant_id is string && isValidId(data.tenant_id);
+             data.tenant_id is string && isValidId(data.tenant_id) &&
+             (data.get('uid', '') is string);
     }
 
     function isValidService(data) {
@@ -63,7 +60,7 @@ service cloud.firestore {
     }
 
     function isValidAvailability(data) {
-      return data.user_id is string && isValidId(data.user_id) &&
+      return data.user_id is string && data.user_id.size() > 0 &&
              data.service_id is string && isValidId(data.service_id) &&
              data.tenant_id is string && isValidId(data.tenant_id) &&
              data.status in ['available', 'unavailable', 'maybe'];
@@ -84,32 +81,39 @@ service cloud.firestore {
     // --- COLLECTIONS ---
 
     match /churches/{churchId} {
-      allow read: if isSignedIn() && (isSuperAdmin() || currentUser().tenant_id == churchId);
-      // Only SuperAdmin can create churches now
+      allow read: if isSignedIn() && (isSuperAdmin() || isTenantMember(churchId));
       allow create: if isSuperAdmin() && isValidId(churchId) && isValidChurch(incoming());
       allow update: if isSuperAdmin() && isValidChurch(incoming());
-      allow delete: if false; 
+      allow delete: if isSuperAdmin();
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || isSuperAdmin() || currentUser().tenant_id == existing().tenant_id);
-      allow list: if isSignedIn() && (isSuperAdmin() || (currentUser().tenant_id == resource.data.tenant_id));
-      
+      // Login: essencial permitir get e list pelo UID ou Email do próprio usuário
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        request.auth.uid == resource.data.get('uid', userId) ||
+        request.auth.token.email == resource.data.get('email', '') ||
+        isSuperAdmin()
+      );
+
       allow create: if isSignedIn() && (
-        request.auth.uid == userId || 
+        request.auth.uid == incoming().get('uid', userId) || 
         isSuperAdmin() || 
         isTenantAdmin(incoming().tenant_id)
       ) && isValidUser(incoming());
-      
+
       allow update: if isSignedIn() && (
         isSuperAdmin() || 
         (isTenantAdmin(existing().tenant_id) && incoming().tenant_id == existing().tenant_id) ||
-        (request.auth.uid == userId && 
-         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'instrument', 'mustChangePassword']) &&
-         incoming().role == existing().role &&
-         incoming().tenant_id == existing().tenant_id
+        (
+          (request.auth.uid == userId || request.auth.uid == existing().get('uid', userId)) &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'type', 'instrument', 'mustChangePassword', 'uid']) &&
+          incoming().role == existing().role &&
+          incoming().tenant_id == existing().tenant_id
         )
       ) && isValidUser(incoming());
+
+      allow delete: if isSuperAdmin() || isTenantAdmin(existing().tenant_id);
     }
 
     match /services/{serviceId} {
@@ -149,7 +153,9 @@ service cloud.firestore {
 
     match /attendance/{attendanceId} {
       allow read: if isTenantMember(resource.data.tenant_id);
-      allow write: if isTenantAdmin(incoming().tenant_id);
+      allow create: if isTenantAdmin(incoming().tenant_id);
+      allow update: if isTenantAdmin(existing().tenant_id);
+      allow delete: if isTenantAdmin(existing().tenant_id);
     }
   }
 }
